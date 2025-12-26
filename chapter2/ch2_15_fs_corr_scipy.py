@@ -9,6 +9,9 @@ from scipy.stats import pearsonr
 
 
 # 导入数值型样例数据
+# p值能够反映两个特征的显著水平, p值越小，则两个特征越显著。
+# 适合两个数值型特征之间的相关性
+
 all_x_y = data_utils.get_all_x_y()
 x = all_x_y.drop(data_utils.label, axis=1)
 x1, x2 = x.loc[:, 'age.in.years'], x.loc[:, 'credit.history',]
