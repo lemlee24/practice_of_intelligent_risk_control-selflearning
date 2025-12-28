@@ -25,6 +25,9 @@ x_cat_with_month = x_cat.merge(model_data[['month', 'creditability']], left_inde
 # 单个特征对比逾期率
 feature_col = 'age.in.years'
 x_cat_one = x_cat_with_month[[feature_col, 'month', 'creditability']]
+
+# 使用pivot_table函数创建透视表，按特征值分组统计各月份的逾期率
+# index参数指定行索引为特征列，columns参数指定列索引为月份，values参数指定要聚合的值为逾期标签，aggfunc指定聚合方法为求均值
 feature_var = x_cat_one.pivot_table(index=feature_col,
                                 columns='month',
                                 values='creditability',
@@ -42,7 +45,7 @@ def variation_by_month(df, time_col, columns, label_col):
 
     return pd.DataFrame([variation_dict], index=['variation']).T
 
-
+# 先计算分月的逾期率，在计算波动率
 var_badrate = variation_by_month(x_cat_with_month, 'month', data_utils.x_cols, 'creditability')
 print("各特征按月逾期率的标准差: \n", var_badrate)
 

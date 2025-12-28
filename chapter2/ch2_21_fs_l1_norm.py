@@ -14,6 +14,7 @@ all_x_y = data_utils.get_all_x_y()
 y = all_x_y.pop(data_utils.label)
 x = all_x_y
 # 带L1惩罚项的逻辑回归作为基模型的特征选择
+# 线性模型可以被看多项式模型，其中每一项的系数可以表征这一维度特征的重要程度，越重要的特征在模型中对应的系数越大，而与输出变量相关性越小的特征，对应的系数越接近于0
 LR = LogisticRegression(penalty='l1', C=0.1, solver='liblinear')
 sf = SelectFromModel(LR)
 x_new = sf.fit_transform(x, y)

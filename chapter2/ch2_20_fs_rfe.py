@@ -12,8 +12,8 @@ from sklearn.linear_model import LogisticRegression
 
 # 导入数值型样例数据
 all_x_y = data_utils.get_all_x_y()
-y = all_x_y.pop(data_utils.label)
-x = all_x_y
+y = all_x_y[data_utils.label]
+x = all_x_y.drop(columns=[data_utils.label])
 # 递归特征消除法，返回特征选择后的数据
 # 参数estimator为基模型
 # 参数n_features_to_select为选择的特征个数
