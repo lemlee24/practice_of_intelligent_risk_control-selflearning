@@ -43,6 +43,22 @@ def xgb_cv(param, x, y, num_boost_round=10000):
 
 def train_xgb(params, x_train, y_train, x_test=None, y_test=None, num_boost_round=10000, early_stopping_rounds=30, verbose_eval=50):
     """
+    训练XGBoost模型
+    
+    参数说明:
+    params: XGBoost模型参数字典
+    x_train: 训练特征数据
+    y_train: 训练标签数据
+    x_test: 测试特征数据（可选），如果为None则使用交叉验证确定最优迭代次数
+    y_test: 测试标签数据（可选），如果x_test为None则此参数也应为None
+    num_boost_round: 最大boosting轮数，默认10000
+    early_stopping_rounds: 早停轮数，如果连续early_stopping_rounds轮auc没有提升则停止训练，默认30
+    verbose_eval: 每verbose_eval轮输出一次训练日志，默认50
+    
+    返回值:
+    训练好的XGBoost模型
+    """
+    """
     训练xgb模型
     """
     dtrain = xgb.DMatrix(x_train, label=y_train)
@@ -60,32 +76,100 @@ def train_xgb(params, x_train, y_train, x_test=None, y_test=None, num_boost_roun
 def xgboost_grid_search(params_space, x_train, y_train, x_test=None, y_test=None, num_boost_round=10000):
     """
     网格调参, 确定其他参数
+    
+    参数说明:
+    params_space: 参数搜索空间，字典格式，键为参数名，值为参数候选值列表
+    x_train: 训练特征数据
+    y_train: 训练标签数据
+    x_test: 测试特征数据（可选），如果为None则从训练集中划分20%作为测试集
+    y_test: 测试标签数据（可选），如果x_test为None则此参数也应为None
+    num_boost_round: 最大boosting轮数，默认10000
+    
+    返回值:
+    在测试集上表现最好的参数组合
     """
-    # 设置训练参数
+    # 如果没有提供测试集，则从训练集中划分20%作为测试集
     if x_test is None:
         x_train, x_test, y_train, y_test = sk_ms.train_test_split(x_train, y_train, test_size=0.2, random_state=1)
-    score_list = []
-    test_params = list(ParameterGrid(params_space))
+    
+    score_list = []  # 存储每个参数组合的评估分数
+    test_params = list(ParameterGrid(params_space))  # 生成所有参数组合
+    
+    # 遍历所有参数组合
     for params_try in test_params:
+        # 设置评估指标和随机种子
         params_try['eval_metric'] = "auc"
         params_try['random_state'] = 1
+        
+        # 训练模型
         clf_obj = train_xgb(params_try, x_train, y_train, x_test, y_test, num_boost_round=num_boost_round,
                             early_stopping_rounds=30, verbose_eval=0)
-        score_list.append(roc_auc_score(y_test, clf_obj.predict(xgb.DMatrix(x_test))))
-    result = pd.DataFrame(dict(zip(score_list, test_params))).T
-    print(result)
-    # 取测试集上效果最好的参数组合
-    params = test_params[np.array(score_list).argmax()]
-    return params
+        
+        # 预测并计算AUC分数
+        y_pred = clf_obj.predict(xgb.DMatrix(x_test))
+        auc_score = roc_auc_score(y_test, y_pred)
+        score_list.append(auc_score)
+    
+    # 创建结果DataFrame并打印
+    result_df = pd.DataFrame({
+        'AUC_Score': score_list,
+        'Parameters': test_params
+    })
+    print("网格搜索结果:")
+    print(result_df)
+    
+    # 找到最佳参数组合
+    # argmax()用于找到数组中最大值的索引位置，这里用来找到AUC分数最高的参数组合的索引
+    best_params_idx = np.argmax(score_list)
+    best_params = test_params[best_params_idx]
+    
+    print(f"最佳参数组合: {best_params}")
+    print(f"最佳AUC分数: {score_list[best_params_idx]}")
+    
+    return best_params
 
+'''
+这个函数 `xgboost_bayesian_optimization` 的作用是使用贝叶斯优化来调参XGBoost模型。它包含一个内部函数 `xgboost_cv_for_bo`，用于评估不同参数组合的性能（通过AUC分数），然后使用贝叶斯优化算法找到最优参数。
+
+让我重写这段代码，使其更清晰、更易维护：
+'''
 
 def xgboost_bayesian_optimization(params_space, x_train, y_train, x_test=None, y_test=None, num_boost_round=10000, nfold=5, init_points=2, n_iter=5, verbose_eval=0, early_stopping_rounds=30):
     """
     贝叶斯调参, 确定其他参数
+    
+    参数说明:
+    params_space: 参数搜索空间，字典格式，键为参数名，值为参数的取值范围元组(min, max)
+    x_train: 训练特征数据
+    y_train: 训练标签数据
+    x_test: 测试特征数据（可选），如果为None则使用交叉验证
+    y_test: 测试标签数据（可选），如果x_test为None则此参数也应为None
+    num_boost_round: 最大boosting轮数，默认10000
+    nfold: 交叉验证折数，默认5
+    init_points: 贝叶斯优化初始化点数，默认2
+    n_iter: 贝叶斯优化迭代次数，默认5
+    verbose_eval: 训练日志输出频率，默认0（不输出）
+    early_stopping_rounds: 早停轮数，默认30
+    
+    返回值:
+    最优参数组合
     """
-    # 设置需要调节的参数及效果评价指标
-    def xgboost_cv_for_bo(eta, gamma, max_depth, min_child_weight,
-                          subsample, colsample_bytree):
+    def evaluate_params(eta, gamma, max_depth, min_child_weight, subsample, colsample_bytree):
+        """
+        评估给定参数组合的性能
+        
+        参数说明:
+        eta: 学习率
+        gamma: 树分裂所需的最小损失减少值
+        max_depth: 树的最大深度
+        min_child_weight: 子节点中最小的样本权重和
+        subsample: 训练样本的子采样比例
+        colsample_bytree: 每棵树使用的特征子集比例
+        
+        返回值:
+        AUC分数
+        """
+        # 构建XGBoost参数字典
         params = {
             'eval_metric': 'auc',
             'booster': 'gbtree',
@@ -98,20 +182,66 @@ def xgboost_bayesian_optimization(params_space, x_train, y_train, x_test=None, y
             'colsample_bytree': colsample_bytree,
             'seed': 1
         }
+        
+        # 根据是否提供测试集选择评估方式
         if x_test is None:
+            # 使用交叉验证评估
             dtrain = xgb.DMatrix(x_train, label=y_train)
-            xgb_cross = xgb.cv(params,
-                               dtrain,
-                               nfold=nfold,
-                               metrics='auc',
-                               early_stopping_rounds=early_stopping_rounds,
-                               num_boost_round=num_boost_round)
-            test_auc = xgb_cross['test-auc-mean'].iloc[-1]
+            cv_results = xgb.cv(
+                params,
+                dtrain,
+                nfold=nfold,
+                metrics='auc',
+                early_stopping_rounds=early_stopping_rounds,
+                num_boost_round=num_boost_round,
+                verbose_eval=verbose_eval
+            )
+            # 返回交叉验证的最终AUC分数
+            test_auc = cv_results['test-auc-mean'].iloc[-1]
         else:
-            clf_obj = train_xgb(params, x_train, y_train, x_test, y_test, num_boost_round=num_boost_round,
-                                early_stopping_rounds=early_stopping_rounds, verbose_eval=verbose_eval)
+            # 使用测试集评估
+            clf_obj = train_xgb(
+                params, 
+                x_train, 
+                y_train, 
+                x_test, 
+                y_test, 
+                num_boost_round=num_boost_round,
+                early_stopping_rounds=early_stopping_rounds, 
+                verbose_eval=verbose_eval
+            )
+            # 计算测试集上的AUC分数
             test_auc = roc_auc_score(y_test, clf_obj.predict(xgb.DMatrix(x_test)))
+        
         return test_auc
+
+    # 使用贝叶斯优化寻找最优参数
+    # bayes_opt.BayesianOptimization用于在给定参数空间内搜索最优参数组合
+    bayes_optimizer = bo.BayesianOptimization(
+        f=evaluate_params,
+        pbounds=params_space,
+        random_state=1
+    )
+    
+    # 执行贝叶斯优化
+    # init_points: 初始随机采样点数
+    # n_iter: 后续贝叶斯优化迭代次数
+    bayes_optimizer.maximize(init_points=init_points, n_iter=n_iter)
+    
+    # 获取最优参数
+    best_params = bayes_optimizer.max['params']
+    
+    # 将需要整数的参数转换为整数类型
+    best_params['max_depth'] = int(best_params['max_depth'])
+    best_params['min_child_weight'] = int(best_params['min_child_weight'])
+    
+    # 添加固定的XGBoost参数
+    best_params['eval_metric'] = 'auc'
+    best_params['booster'] = 'gbtree'
+    best_params['objective'] = 'binary:logistic'
+    best_params['seed'] = 1
+    
+    return best_params
 
     # 指定需要调节参数的取值范围
     xgb_bo_obj = bo.BayesianOptimization(xgboost_cv_for_bo, params_space, random_state=1)
