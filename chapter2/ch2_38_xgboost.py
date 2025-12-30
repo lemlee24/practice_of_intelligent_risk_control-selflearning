@@ -4,6 +4,10 @@ import sys
 sys.path.append("./")
 sys.path.append("../")
 
+# 设置matplotlib后端以兼容新版本
+import matplotlib
+matplotlib.use('Agg')
+
 import shap
 import numpy as np
 import pandas as pd
@@ -13,14 +17,27 @@ import sklearn.model_selection as sk_ms
 from sklearn.model_selection import ParameterGrid
 from sklearn.metrics import roc_auc_score
 from utils import data_utils
-import shap
 from chapter2.ch2_31_model_deployment_pickle import save_model_as_pkl
 
 
 # 确定最优树的颗数
 def xgb_cv(param, x, y, num_boost_round=10000):
+    """
+    使用交叉验证确定XGBoost模型的最优迭代次数
+    
+    参数说明:
+    param: XGBoost模型参数字典
+    x: 训练特征数据
+    y: 训练标签数据
+    num_boost_round: 最大 boosting 轮数，默认10000
+    
+    返回值:
+    最优的 boosting 轮数，即交叉验证结果的行数
+    """
     dtrain = xgb.DMatrix(x, label=y)
+    # 执行交叉验证，early_stopping_rounds=30表示如果30轮内auc没有提升则停止训练
     cv_res = xgb.cv(param, dtrain, num_boost_round=num_boost_round, early_stopping_rounds=30)
+    # 返回实际训练的轮数（即达到early stopping时的轮数）
     num_boost_round = cv_res.shape[0]
     return num_boost_round
 
@@ -158,10 +175,17 @@ auc_score = roc_auc_score(test_y, final_xgb_model.predict(xgb.DMatrix(test_x)))
 print("随机搜索调参模型AUC: ", auc_score)
 
 # 保存模型
-save_model_as_pkl(final_xgb_model, "./data/xgb_model.pkl")
+import os
+data_dir = "./data/model" if os.path.exists("./data/model") else "../data/model"
+os.makedirs(data_dir, exist_ok=True)
+save_model_as_pkl(final_xgb_model, os.path.join(data_dir, "xgb_model.pkl"))
 
 # SHAP计算
 explainer = shap.TreeExplainer(final_xgb_model)
 shap_values = explainer.shap_values(train_x)
-# SHAP可视化
-shap.summary_plot(shap_values, train_x, max_display=5)
+# SHAP可视化并保存到文件
+import matplotlib.pyplot as plt
+shap.summary_plot(shap_values, train_x, max_display=5, show=False)
+plt.savefig(os.path.join(data_dir, 'shap_summary_plot.png'), dpi=150, bbox_inches='tight')
+print(f"SHAP可视化图已保存到: {os.path.join(data_dir, 'shap_summary_plot.png')}")
+plt.close()
