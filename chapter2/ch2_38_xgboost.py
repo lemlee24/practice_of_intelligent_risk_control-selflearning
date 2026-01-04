@@ -310,12 +310,33 @@ data_dir = "./data/model" if os.path.exists("./data/model") else "../data/model"
 os.makedirs(data_dir, exist_ok=True)
 save_model_as_pkl(final_xgb_model, os.path.join(data_dir, "xgb_model.pkl"))
 
-# SHAP计算
-explainer = shap.TreeExplainer(final_xgb_model)
-shap_values = explainer.shap_values(train_x)
+# SHAP计算 - 用于解释XGBoost模型的预测结果
+# SHAP (SHapley Additive exPlanations) 是一种解释机器学习模型预测的方法
+# 它通过计算每个特征对预测结果的贡献度，帮助理解模型的决策过程
+explainer = shap.TreeExplainer(final_xgb_model)  # 创建SHAP解释器，专门用于树模型
+shap_values = explainer.shap_values(train_x)     # 计算训练数据上每个样本的SHAP值
+                                                  # SHAP值表示每个特征对模型预测的贡献程度
 # SHAP可视化并保存到文件
 import matplotlib.pyplot as plt
-shap.summary_plot(shap_values, train_x, max_display=5, show=False)
-plt.savefig(os.path.join(data_dir, 'shap_summary_plot.png'), dpi=150, bbox_inches='tight')
-print(f"SHAP可视化图已保存到: {os.path.join(data_dir, 'shap_summary_plot.png')}")
+# 设置全局字体大小，缩小文字以突出图形内容
+plt.rcParams.update({
+    'font.size': 2,
+    'axes.titlesize': 8,
+    'axes.labelsize': 7,
+    'xtick.labelsize': 6,
+    'ytick.labelsize': 6,
+    'legend.fontsize': 1,
+    'figure.titlesize': 1
+})
+
+# 创建更大的图形以更好地展示内容
+fig = plt.figure(figsize=(10, 6))
+shap.summary_plot(shap_values, train_x, max_display=10, show=False)
+plt.tight_layout()
+save_path = os.path.join(data_dir, 'shap_summary_plot.png')
+plt.savefig(save_path, dpi=150, bbox_inches='tight')
+print(f"SHAP可视化图已保存到: {os.path.abspath(save_path)}")
 plt.close()
+
+# 重置matplotlib参数
+plt.rcParams.update(plt.rcParamsDefault)

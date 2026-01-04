@@ -27,7 +27,9 @@ def get_datestamps(begin_date, end_date):
     :param end_date: 结束时间
     :return: [begin_date,end_date]日期的时间戳
     """
-    date_arr = [int(time.mktime(x.timetuple())) for x in list(pd.date_range(start=begin_date, end=end_date))]
+    # 生成指定日期范围内的日期序列，并转换为时间戳
+    # pd.date_range生成日期范围，time.mktime将日期转换为时间戳，int取整
+    date_arr = [int(time.mktime(x.timetuple())) for x in pd.date_range(start=begin_date, end=end_date)]
     return date_arr
 
 
@@ -46,15 +48,21 @@ if __name__ == '__main__':
     fea_cover = x_all.apply(cover_ratio).to_frame('cover_ratio')
     print("特征覆盖度: ", fea_cover)
 
-    # 特征离散度
-    fea_variation = variation(fea_2)
+    # 特征离散度，变异系数
+    # fea_variation = variation(fea_2)
+    fea_variation = x_all.apply(variation).to_frame('variation')
     print("特征离散度: ", fea_variation)
 
     # 计算时间相关性
     x_all['tm_col'] = get_datestamps('2020-10-01', '2020-10-07')
 
-    # 计算三个特征与时间的Peason系数
+    # 计算三个特征与时间的Peason系数，相关性矩阵
     fea_time_corr = x_all.loc[:, ['fea_3', 'fea_4', 'fea_5', 'tm_col']].corr().loc[:, ['tm_col']]
+
+    # 在特征工程中，需要检查特征与时间的相关性
+    # 有些特征可能与时间强相关但实际上没有业务意义
+    # 这类特征在历史数据上表现好，但在未来可能失效
+    # 这是数据泄漏或过拟合的一种表现
 
     print("构造的特征为: \n", x_all)
     print("特征与时间的Peason系数计算结果: \n", fea_time_corr)
