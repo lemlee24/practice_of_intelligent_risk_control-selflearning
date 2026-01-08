@@ -4,6 +4,10 @@ import sys
 sys.path.append("./")
 sys.path.append("../")
 
+import os
+import warnings
+warnings.filterwarnings('ignore')
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -35,13 +39,14 @@ def calculate_pass_loss_decile(score_series, y_series):
     return decile_df
 
 
-def poly_regression(x_series, y_series, degree, plot=True):
+def poly_regression(x_series, y_series, degree, plot=True, save_path=None):
     """
     多项式回归拟合
     :param x_series: x数据
     :param y_series: y数据
     :param degree: 指定多项式次数
     :param plot: 是否作图
+    :param save_path: 图片保存路径
     :return:
     """
     coeff = polyfit(x_series, y_series, degree)
@@ -52,34 +57,24 @@ def poly_regression(x_series, y_series, degree, plot=True):
 
     if plot:
         # 用来正常显示中文标签
-        plt.rcParams['font.sans-serif'] = ['Microsoft YaHei']
+        plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei']
         plt.rcParams['axes.unicode_minus'] = False
 
         plt.figure(figsize=(10, 5))
-        plt.plot(x_series, y_series, 'rx')
-        plt.plot(x_series, f(x_series))
+        plt.plot(x_series, y_series, 'rx', label='实际数据')
+        plt.plot(x_series, f(x_series), 'b-', label=f'拟合曲线 (R²={R2:.4f})')
         plt.xlabel('通过率', {'size': 15})
         plt.ylabel('坏账率', {'size': 15})
+        plt.title('通过率与坏账率关系拟合', {'size': 16})
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"图片已保存到: {save_path}")
+        
         plt.show()
     return coeff
-
-
-german_score = pd.read_csv('data/german_score.csv')
-german_score.head()
-
-decile_df = calculate_pass_loss_decile(german_score['score'],
-                                       german_score['creditability'])
-print(decile_df.head())
-
-# 数据准备
-x = decile_df['ApprovalRate']
-# 逾期率折算为坏账率
-y = decile_df['ApprovedEventRate'] / 2.5
-
-poly_coef = poly_regression(x, y, 2, plot=True)
-# 坏账率L(x)与通过率x的关系
-l_x = poly1d(poly_coef)
-print(l_x)
 
 
 def find_best_approval_rate(x_to_loss_func, score_df):
@@ -116,4 +111,53 @@ def find_best_approval_rate(x_to_loss_func, score_df):
     print('迭代终止原因：', res.message)
 
 
+# ============================================================================
+# 主程序
+# ============================================================================
+print("="*80)
+print("模型策略优化分析")
+print("="*80)
+
+# 创建输出目录
+output_dir = 'data/rules'
+if not os.path.exists(output_dir):
+    os.makedirs(output_dir)
+    print(f"已创建目录: {output_dir}")
+
+german_score = pd.read_csv('data/german_score.csv')
+print(f"\n数据加载完成: {german_score.shape}")
+
+decile_df = calculate_pass_loss_decile(german_score['score'],
+                                       german_score['creditability'])
+print("\n通过率与坏账率关系表（前5行）:")
+print(decile_df.head())
+
+# 导出decile_df到Excel
+decile_output_path = os.path.join(output_dir, 'approval_rate_loss_rate.xlsx')
+decile_df.to_excel(decile_output_path)
+print(f"\n通过率坏账率关系表已导出到: {decile_output_path}")
+print(f"绝对路径: {os.path.abspath(decile_output_path)}")
+
+# 数据准备
+print("\n" + "="*80)
+print("多项式回归拟合")
+print("="*80)
+x = decile_df['ApprovalRate']
+# 逾期率折算为坏账率
+y = decile_df['ApprovedEventRate'] / 2.5
+
+fig_path = os.path.join(output_dir, 'approval_loss_regression.png')
+poly_coef = poly_regression(x, y, 2, plot=True, save_path=fig_path)
+# 坏账率L(x)与通过率x的关系
+l_x = poly1d(poly_coef)
+print("\n拟合函数:")
+print(l_x)
+
+print("\n" + "="*80)
+print("最优化求解")
+print("="*80)
 find_best_approval_rate(l_x, decile_df)
+
+print("\n" + "="*80)
+print("分析完成！")
+print("="*80)

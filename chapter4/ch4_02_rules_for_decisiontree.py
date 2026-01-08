@@ -5,9 +5,18 @@ sys.path.append("./")
 sys.path.append("../")
 
 import os
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning, module='scorecardpy')
+
 import sklearn.tree as st
-import graphviz
 from utils import data_utils
+
+try:
+    import graphviz
+    GRAPHVIZ_AVAILABLE = True
+except ImportError:
+    GRAPHVIZ_AVAILABLE = False
+    print("警告: graphviz库未安装，将跳过决策树可视化")
 
 
 def decision_tree_resolve(train_x, train_y, class_names=None, max_depth=3, fig_path=''):
@@ -79,23 +88,35 @@ if not os.path.exists(output_dir):
 # ============================================================================
 # 生成决策树可视化
 # ============================================================================
-print("\n正在生成决策树可视化...")
-fig_path = os.path.join(output_dir, 'decision_tree')
-graph = decision_tree_resolve(X, y, fig_path=fig_path)
+if GRAPHVIZ_AVAILABLE:
+    print("\n正在生成决策树可视化...")
+    fig_path = os.path.join(output_dir, 'decision_tree')
+    graph = decision_tree_resolve(X, y, fig_path=fig_path)
 
-# 保存图片（生成PDF和PNG格式）
-print(f"正在保存决策树图片...")
-graph.render(cleanup=True)  # 生成PDF并清理中间文件
-print(f"\n决策树图片已保存到:")
-print(f"  - PDF: {os.path.abspath(fig_path + '.pdf')}")
-
-# 尝试生成PNG格式（如果系统支持）
-try:
-    graph.format = 'png'
-    graph.render(cleanup=True)
-    print(f"  - PNG: {os.path.abspath(fig_path + '.png')}")
-except Exception as e:
-    print(f"  注意: PNG格式生成失败，请查看 PDF文件")
+    # 保存图片（生成PDF和PNG格式）
+    print(f"正在保存决策树图片...")
+    try:
+        graph.render(cleanup=True)  # 生成PDF并清理中间文件
+        print(f"\n决策树图片已保存到:")
+        print(f"  - PDF: {os.path.abspath(fig_path + '.pdf')}")
+        
+        # 尝试生成PNG格式（如果系统支持）
+        try:
+            graph.format = 'png'
+            graph.render(cleanup=True)
+            print(f"  - PNG: {os.path.abspath(fig_path + '.png')}")
+        except Exception as e:
+            print(f"  注意: PNG格式生成失败，请查看 PDF文件")
+    except Exception as e:
+        print(f"\n警告: 决策树可视化失败")
+        print(f"原因: {str(e)}")
+        print(f"\n解决方案:")
+        print(f"  1. 安装 Graphviz: https://graphviz.org/download/")
+        print(f"  2. 将 Graphviz 的 bin 目录添加到系统 PATH 环境变量")
+        print(f"  3. 重新启动命令行/IDE")
+        print(f"\n跳过可视化，继续执行规则生成...")
+else:
+    print("\n跳过决策树可视化（graphviz未安装）...")
 
 print("\n决策树信息:")
 print(f"- 最大深度: 3")
